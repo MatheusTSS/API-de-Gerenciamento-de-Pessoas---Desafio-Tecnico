@@ -1,0 +1,220 @@
+Guia prático para criação do sistema (Backend + Frontend)
+
+Backend - API com Node.js, Express e SQLite
+
+    1. Criar o projeto e instalar dependências
+
+    mkdir backend && cd backend
+    npm init -y
+    npm install express sqlite3 cors
+    npm install nodemon --save-dev
+
+    2. Estruturar o projeto
+
+    backend/
+    │-- node_modules/
+    │-- database.sqlite
+    │-- package.json
+    │-- server.js
+    │-- db.js
+    │-- routes/
+    │   │-- pessoaRoutes.js
+    │-- controllers/
+    │   │-- pessoaController.js
+    │-- models/
+    │   │-- pessoaModel.js
+
+    3. Criar o banco de dados (db.js)
+
+    const sqlite3 = require('sqlite3').verbose();
+    const { open } = require('sqlite');
+
+    let db;
+    (async () => {
+        db = await open({ filename: './database.sqlite', driver: sqlite3.Database });
+        await db.exec(`CREATE TABLE IF NOT EXISTS pessoas (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nome TEXT NOT NULL,
+            email TEXT UNIQUE NOT NULL,
+            data_nascimento TEXT NOT NULL
+        )`);
+    })();
+
+    module.exports = () => db;
+
+    4. Criar o modelo (pessoaModel.js)
+
+    const getDB = require('../db');
+
+    async function getAllPessoas() {
+        const db = await getDB();
+        return db.all('SELECT * FROM pessoas');
+    }
+
+    async function createPessoa(nome, email, data_nascimento) {
+        const db = await getDB();
+        const result = await db.run('INSERT INTO pessoas (nome, email, data_nascimento) VALUES (?, ?, ?)', [nome, email, data_nascimento]);
+        return { id: result.lastID, nome, email, data_nascimento };
+    }
+
+    module.exports = { getAllPessoas, createPessoa };
+
+    5. Criar o controlador (pessoaController.js)
+
+    const Pessoa = require('../models/pessoaModel');
+
+    async function listarPessoas(req, res) {
+        res.json(await Pessoa.getAllPessoas());
+    }
+
+    async function criarPessoa(req, res) {
+        try {
+            const novaPessoa = await Pessoa.createPessoa(req.body.nome, req.body.email, req.body.data_nascimento);
+            res.status(201).json(novaPessoa);
+        } catch (err) {
+            res.status(400).json({ error: err.message });
+        }
+    }
+
+    module.exports = { listarPessoas, criarPessoa };
+
+    6. Criar as rotas (pessoaRoutes.js)
+
+    const express = require('express');
+    const router = express.Router();
+    const pessoaController = require('../controllers/pessoaController');
+
+    router.get('/pessoas', pessoaController.listarPessoas);
+    router.post('/pessoa', pessoaController.criarPessoa);
+
+    module.exports = router;
+
+    7. Configurar o servidor (server.js)
+
+    const express = require('express');
+    const cors = require('cors');
+    const pessoaRoutes = require('./routes/pessoaRoutes');
+
+    const app = express();
+    const PORT = 3000;
+
+    app.use(express.json());
+    app.use(cors());
+    app.use('/api', pessoaRoutes);
+
+    app.listen(PORT, () => {
+        console.log(`Servidor rodando na porta ${PORT}`);
+    });
+
+    8. Ajustar package.json
+
+    "scripts": {
+        "start": "node server.js",
+        "dev": "nodemon server.js"
+    }
+
+    9. Rodar o servidor
+
+    npm run dev
+
+Frontend - Aplicação em React com Vite e Tailwind
+
+1. Criar o projeto e instalar dependências
+
+npm create vite@latest frontend --template react
+cd frontend
+npm install
+npm install axios tailwindcss postcss autoprefixer
+npx tailwindcss init -p
+
+2. Configurar Tailwind CSS
+
+No arquivo tailwind.config.js, adicione:
+module.exports = {
+  content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
+  theme: { extend: {} },
+  plugins: [],
+};
+
+No arquivo src/index.css, adicione:
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+3. Estruturar o projeto
+
+frontend/
+├── src/
+│   ├── components/
+│   │   ├── PessoaItem.jsx
+│   │   ├── PessoaForm.jsx
+│   ├── pages/
+│   │   ├── Pessoas.jsx
+│   ├── App.jsx
+│   ├── main.jsx
+│   ├── index.css
+├── public/
+├── package.json
+├── vite.config.js
+├── tailwind.config.js
+└── README.md
+
+4. Criar os componentes
+
+PessoaItem.jsx
+import React from "react";
+const PessoaItem = ({ pessoa, onRemove }) => (
+  <div className="bg-blue-100 rounded p-1 mb-2">
+    <div><b>Nome:</b> {pessoa.nome}</div>
+    <div><b>Email:</b> {pessoa.email}</div>
+    <div><b>Data de Nascimento:</b> {pessoa.data_nascimento}</div>
+    <button className="bg-red-500 text-white p-1 rounded" onClick={() => onRemove(pessoa.id)}>Excluir</button>
+  </div>
+);
+export default PessoaItem;
+
+PessoaForm.jsx
+import React from "react";
+const PessoaForm = ({ nome, setNome, email, setEmail, dataNascimento, setDataNascimento, onAdd }) => (
+  <div>
+    <input type="text" value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Nome" />
+    <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" />
+    <input type="date" value={dataNascimento} onChange={(e) => setDataNascimento(e.target.value)} />
+    <button onClick={onAdd}>Cadastrar</button>
+  </div>
+);
+export default PessoaForm;
+
+5. Criar a página principal
+
+import React, { useState, useEffect } from "react";
+import axios from "axios";
+import PessoaItem from "../components/PessoaItem";
+import PessoaForm from "../components/PessoaForm";
+
+const Pessoas = () => {
+  const [pessoas, setPessoas] = useState([]);
+  const [nome, setNome] = useState("");
+  const [email, setEmail] = useState("");
+  const [dataNascimento, setDataNascimento] = useState("");
+
+  useEffect(() => {
+    axios.get("http://localhost:3000/api/pessoas").then(({ data }) => setPessoas(data));
+  }, []);
+
+  const adicionarPessoa = () => {
+    axios.post("http://localhost:3000/api/pessoa", { nome, email, data_nascimento: dataNascimento }).then(() => window.location.reload());
+  };
+
+  return (
+    <div>
+      <PessoaForm nome={nome} setNome={setNome} email={email} setEmail={setEmail} dataNascimento={dataNascimento} setDataNascimento={setDataNascimento} onAdd={adicionarPessoa} />
+      {pessoas.map(pessoa => <PessoaItem key={pessoa.id} pessoa={pessoa} onRemove={() => {}} />)}
+    </div>
+  );
+};
+export default Pessoas;
+
+6. Rodar o frontend
+
+npm run dev
